@@ -15,7 +15,7 @@
     "lint": "eslint \"**/*.ts\"",
     "lint:fix": "eslint --fix \"**/*.ts\"",
     "prod": "node ./build/index.js",
-    "pub": "git add . && git commit -m 'chore:update' && pnpm version patch && pnpm run build && pnpm publish"
+    "pub": "git add . && git commit -m 'chore: update' && pnpm version patch && pnpm run build && pnpm publish"
   },
   "keywords": [],
   "author": "",
