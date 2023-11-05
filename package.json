@@ -41,5 +41,8 @@
     "tsconfig-paths": "^4.2.0",
     "tscpaths": "^0.0.9",
     "typescript": "^5.2.2"
+  },
+  "dependencies": {
+    "nats": "^2.18.0"
   }
 }
