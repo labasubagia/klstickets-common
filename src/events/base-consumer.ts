@@ -1,6 +1,6 @@
 import { AckPolicy, DeliverPolicy, type JsMsg, type NatsConnection } from 'nats'
 
-import { type Event } from './types'
+import { type Event } from '@/events/types'
 
 export abstract class Consumer<T extends Event> {
   abstract topic: T['topic']

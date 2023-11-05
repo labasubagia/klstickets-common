@@ -1,7 +1,7 @@
 import type { NatsConnection, NatsError, PubAck } from 'nats'
 import { ErrorCode, StringCodec } from 'nats'
 
-import { type Event } from './types'
+import { type Event } from '@/events/types'
 
 export abstract class Publisher<T extends Event> {
   abstract topic: T['topic']
@@ -41,7 +41,7 @@ export abstract class Publisher<T extends Event> {
 
   async publish(payload: T['data']): Promise<PubAck> {
     const js = this.client.jetstream()
-    return js.publish(
+    return await js.publish(
       this.subject,
       this.stringCodec.encode(JSON.stringify(payload))
     )

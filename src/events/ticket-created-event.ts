@@ -1,4 +1,4 @@
-import { type Subject, type Topic } from './types'
+import { type Subject, type Topic } from '@/events/types'
 
 export interface TicketCreatedEvent {
   topic: Topic.Ticket
