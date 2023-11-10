@@ -1,4 +1,11 @@
-import { AckPolicy, DeliverPolicy, type JsMsg, type NatsConnection } from 'nats'
+import {
+  AckPolicy,
+  DeliverPolicy,
+  ErrorCode,
+  NatsError,
+  type JsMsg,
+  type NatsConnection
+} from 'nats'
 
 import { type Event } from '@/events/types'
 
@@ -14,6 +21,31 @@ export abstract class Consumer<T extends Event> {
 
   async init(): Promise<this> {
     const jsm = await this.client.jetstreamManager()
+
+    const stream = await jsm.streams.get(this.topic).catch(async (error) => {
+      const isNotFound =
+        (error as NatsError)?.code === ErrorCode.JetStream404NoMessages
+      if (isNotFound) {
+        // add stream
+        await jsm.streams.add({
+          name: this.topic,
+          subjects: [this.subject]
+        })
+      } else {
+        console.error(error)
+      }
+    })
+
+    if (stream) {
+      // update stream
+      const streamInfo = await stream.info()
+      if (!streamInfo.config.subjects.includes(this.subject)) {
+        streamInfo.config.subjects?.push(this.subject)
+        await jsm.streams.update(this.topic, streamInfo.config)
+      }
+    }
+
+    // add consumer
     await jsm.consumers.add(this.topic, {
       durable_name: this.queueGroupName,
       deliver_policy: DeliverPolicy.All,
