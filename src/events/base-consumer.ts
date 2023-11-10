@@ -15,68 +15,95 @@ export abstract class Consumer<T extends Event> {
   abstract queueGroupName: string
   abstract failRetryWaitMs: number
 
-  abstract onMessage(message: JsMsg, data: T['data']): Promise<void>
+  abstract onMessage(data: T['data'], message: JsMsg): Promise<void>
 
   constructor(private readonly client: NatsConnection) {}
 
   async init(): Promise<this> {
     const jsm = await this.client.jetstreamManager()
+    const js = this.client.jetstream()
 
-    const stream = await jsm.streams.get(this.topic).catch(async (error) => {
-      const isNotFound =
-        (error as NatsError)?.code === ErrorCode.JetStream404NoMessages
-      if (isNotFound) {
-        // add stream
-        await jsm.streams.add({
-          name: this.topic,
-          subjects: [this.subject]
-        })
-      } else {
+    // upsert stream
+    await jsm.streams
+      .get(this.topic)
+      .then(async (stream) => {
+        const { config } = await stream.info()
+        const hasSubject = config.subjects.includes(this.subject)
+        if (hasSubject) {
+          return
+        }
+        config.subjects?.push(this.subject)
+        await jsm.streams.update(this.topic, config)
+      })
+      .catch(async (error) => {
+        const isNotFound =
+          (error as NatsError)?.code === ErrorCode.JetStream404NoMessages
+        if (isNotFound) {
+          await jsm.streams.add({ name: this.topic, subjects: [this.subject] })
+          return
+        }
         console.error(error)
-      }
-    })
+      })
 
-    if (stream != null) {
-      // update stream
-      const streamInfo = await stream.info()
-      if (!streamInfo.config.subjects.includes(this.subject)) {
-        streamInfo.config.subjects?.push(this.subject)
-        await jsm.streams.update(this.topic, streamInfo.config)
-      }
-    }
+    // upsert consumer
+    await js.consumers
+      .get(this.topic, this.queueGroupName)
+      .then(async (consumer) => {
+        const { config } = await consumer.info()
+        const hasSubject = (config.filter_subjects ?? []).includes(this.subject)
+        if (hasSubject) {
+          return
+        }
 
-    // add consumer
-    await jsm.consumers.add(this.topic, {
-      durable_name: this.queueGroupName,
-      deliver_policy: DeliverPolicy.All,
-      ack_policy: AckPolicy.Explicit,
-      filter_subject: this.subject
-    })
+        config.filter_subjects?.push(this.subject)
+        await jsm.consumers.update(this.topic, this.queueGroupName, {
+          ...config,
+          filter_subject: undefined
+        })
+      })
+      .catch(async (error) => {
+        const isNotFound =
+          (error as NatsError)?.code === ErrorCode.JetStream404NoMessages
+        if (isNotFound) {
+          await jsm.consumers.add(this.topic, {
+            durable_name: this.queueGroupName,
+            deliver_policy: DeliverPolicy.All,
+            ack_policy: AckPolicy.Explicit,
+            filter_subjects: [this.subject]
+          })
+          return
+        }
+        console.log(error.message)
+      })
+
     return this
   }
 
   async consume(): Promise<void> {
     const js = this.client.jetstream()
     const consumer = await js.consumers.get(this.topic, this.queueGroupName)
-    const messages = await consumer.consume()
-    for await (const message of messages) {
-      console.log(
-        `event received: ${this.queueGroupName} -> ${this.topic}/${this.subject}`
-      )
-      const decoded = message.json()
-      try {
-        await this.onMessage(message, decoded as T['data'])
-        message.ack()
-      } catch (error) {
-        console.error(
-          `Error consume msg ${message.seq} with error: ${
-            (error as Error).message
-          } and payload ${JSON.stringify(decoded)}, retry in ${
-            this.failRetryWaitMs
-          }`
-        )
-        message.nak(this.failRetryWaitMs)
+    await consumer.consume({
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises
+      callback: async (msg) => {
+        if (msg.subject !== this.subject) {
+          msg.nak()
+          return
+        }
+        const decoded = msg.json()
+        try {
+          await this.onMessage(decoded as T['data'], msg)
+          msg.ack()
+        } catch (error) {
+          console.error(
+            `Error consume msg ${msg.seq} with error: ${
+              (error as Error).message
+            } and payload ${JSON.stringify(decoded)}, retry in ${
+              this.failRetryWaitMs
+            }ms`
+          )
+          msg.nak(this.failRetryWaitMs)
+        }
       }
-    }
+    })
   }
 }
