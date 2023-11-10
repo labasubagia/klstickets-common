@@ -2,9 +2,9 @@ import {
   AckPolicy,
   DeliverPolicy,
   ErrorCode,
-  NatsError,
   type JsMsg,
-  type NatsConnection
+  type NatsConnection,
+  type NatsError
 } from 'nats'
 
 import { type Event } from '@/events/types'
@@ -36,7 +36,7 @@ export abstract class Consumer<T extends Event> {
       }
     })
 
-    if (stream) {
+    if (stream != null) {
       // update stream
       const streamInfo = await stream.info()
       if (!streamInfo.config.subjects.includes(this.subject)) {
@@ -60,6 +60,9 @@ export abstract class Consumer<T extends Event> {
     const consumer = await js.consumers.get(this.topic, this.queueGroupName)
     const messages = await consumer.consume()
     for await (const message of messages) {
+      console.log(
+        `event received: ${this.queueGroupName} -> ${this.topic}/${this.subject}`
+      )
       const decoded = message.json()
       try {
         await this.onMessage(message, decoded as T['data'])

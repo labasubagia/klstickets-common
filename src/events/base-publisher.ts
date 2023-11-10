@@ -41,6 +41,7 @@ export abstract class Publisher<T extends Event> {
 
   async publish(payload: T['data']): Promise<PubAck> {
     const js = this.client.jetstream()
+    console.log(`event published: ${this.topic}/${this.subject}`)
     return await js.publish(
       this.subject,
       this.stringCodec.encode(JSON.stringify(payload))
