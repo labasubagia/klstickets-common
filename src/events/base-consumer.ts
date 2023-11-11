@@ -17,9 +17,17 @@ export abstract class Consumer<T extends Event> {
 
   abstract onMessage(data: T['data'], message: JsMsg): Promise<void>
 
-  constructor(private readonly client: NatsConnection) {}
+  private _client?: NatsConnection
+  get client(): NatsConnection {
+    if (this._client == null) {
+      throw new Error('please call init() first')
+    }
+    return this._client
+  }
 
-  async init(): Promise<this> {
+  async init(client: NatsConnection): Promise<this> {
+    this._client = client
+
     const jsm = await this.client.jetstreamManager()
     const js = this.client.jetstream()
 

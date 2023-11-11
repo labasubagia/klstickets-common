@@ -8,13 +8,21 @@ export abstract class Publisher<T extends Event> {
   abstract subject: T['subject']
   private readonly stringCodec = StringCodec()
 
-  constructor(private readonly client: NatsConnection) {}
+  private _client?: NatsConnection
+  get client(): NatsConnection {
+    if (this._client == null) {
+      throw new Error('please call init() first')
+    }
+    return this._client
+  }
 
-  async init(): Promise<this> {
+  async init(client: NatsConnection): Promise<this> {
+    this._client = client
+
     const jsm = await this.client.jetstreamManager()
 
     // upsert stream
-    await jsm.streams
+    await jsm?.streams
       .get(this.topic)
       .then(async (stream) => {
         const { config } = await stream.info()
