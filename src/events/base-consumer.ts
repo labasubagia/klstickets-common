@@ -89,6 +89,9 @@ export abstract class Consumer<T extends Event> {
           msg.nak()
           return
         }
+        console.log(
+          `event received: ${this.topic}/${this.subject} -> ${this.queueGroupName}`
+        )
         const decoded = msg.json()
         try {
           await this.onMessage(decoded as T['data'], msg)
