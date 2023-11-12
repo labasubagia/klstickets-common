@@ -40,7 +40,7 @@ export abstract class Publisher<T extends Event> {
           await jsm.streams.add({ name: this.topic, subjects: [this.subject] })
           return
         }
-        console.error(error)
+        throw error
       })
 
     return this

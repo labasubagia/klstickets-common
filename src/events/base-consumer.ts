@@ -50,7 +50,7 @@ export abstract class Consumer<T extends Event> {
           await jsm.streams.add({ name: this.topic, subjects: [this.subject] })
           return
         }
-        console.error(error)
+        throw error
       })
 
     // upsert consumer
@@ -81,7 +81,7 @@ export abstract class Consumer<T extends Event> {
           })
           return
         }
-        console.log(error.message)
+        throw error
       })
 
     return this
