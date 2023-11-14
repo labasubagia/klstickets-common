@@ -1,6 +1,7 @@
-import type { NatsConnection, NatsError, PubAck } from 'nats'
-import { ErrorCode, StringCodec } from 'nats'
+import type { NatsConnection, PubAck } from 'nats'
+import { StringCodec } from 'nats'
 
+import { StreamMaker } from '@/events/stream-maker'
 import { type Event } from '@/events/types'
 
 export abstract class Publisher<T extends Event> {
@@ -18,31 +19,8 @@ export abstract class Publisher<T extends Event> {
 
   async init(client: NatsConnection): Promise<this> {
     this._client = client
-
-    const jsm = await this.client.jetstreamManager()
-
-    // upsert stream
-    await jsm?.streams
-      .get(this.topic)
-      .then(async (stream) => {
-        const { config } = await stream.info()
-        const hasSubject = config.subjects.includes(this.subject)
-        if (hasSubject) {
-          return
-        }
-        config.subjects?.push(this.subject)
-        await jsm.streams.update(this.topic, config)
-      })
-      .catch(async (error) => {
-        const isNotFound =
-          (error as NatsError)?.code === ErrorCode.JetStream404NoMessages
-        if (isNotFound) {
-          await jsm.streams.add({ name: this.topic, subjects: [this.subject] })
-          return
-        }
-        throw error
-      })
-
+    const streamMaker = new StreamMaker(client, this.topic, this.subject)
+    await streamMaker.make()
     return this
   }
 

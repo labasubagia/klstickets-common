@@ -1,12 +1,7 @@
-import {
-  AckPolicy,
-  DeliverPolicy,
-  ErrorCode,
-  type JsMsg,
-  type NatsConnection,
-  type NatsError
-} from 'nats'
+import { type JsMsg, type NatsConnection } from 'nats'
 
+import { ConsumerMaker } from '@/events/consumer-maker'
+import { StreamMaker } from '@/events/stream-maker'
 import { type Event } from '@/events/types'
 
 export abstract class Consumer<T extends Event> {
@@ -28,61 +23,16 @@ export abstract class Consumer<T extends Event> {
   async init(client: NatsConnection): Promise<this> {
     this._client = client
 
-    const jsm = await this.client.jetstreamManager()
-    const js = this.client.jetstream()
+    const streamMaker = new StreamMaker(client, this.topic, this.subject)
+    await streamMaker.make()
 
-    // upsert stream
-    await jsm.streams
-      .get(this.topic)
-      .then(async (stream) => {
-        const { config } = await stream.info()
-        const hasSubject = config.subjects.includes(this.subject)
-        if (hasSubject) {
-          return
-        }
-        config.subjects?.push(this.subject)
-        await jsm.streams.update(this.topic, config)
-      })
-      .catch(async (error) => {
-        const isNotFound =
-          (error as NatsError)?.code === ErrorCode.JetStream404NoMessages
-        if (isNotFound) {
-          await jsm.streams.add({ name: this.topic, subjects: [this.subject] })
-          return
-        }
-        throw error
-      })
-
-    // upsert consumer
-    await js.consumers
-      .get(this.topic, this.queueGroupName)
-      .then(async (consumer) => {
-        const { config } = await consumer.info()
-        const hasSubject = (config.filter_subjects ?? []).includes(this.subject)
-        if (hasSubject) {
-          return
-        }
-
-        config.filter_subjects?.push(this.subject)
-        await jsm.consumers.update(this.topic, this.queueGroupName, {
-          ...config,
-          filter_subject: undefined
-        })
-      })
-      .catch(async (error) => {
-        const isNotFound =
-          (error as NatsError)?.code === ErrorCode.JetStream404NoMessages
-        if (isNotFound) {
-          await jsm.consumers.add(this.topic, {
-            durable_name: this.queueGroupName,
-            deliver_policy: DeliverPolicy.All,
-            ack_policy: AckPolicy.Explicit,
-            filter_subjects: [this.subject]
-          })
-          return
-        }
-        throw error
-      })
+    const consumerMaker = new ConsumerMaker(
+      client,
+      this.topic,
+      this.subject,
+      this.queueGroupName
+    )
+    await consumerMaker.make()
 
     return this
   }
